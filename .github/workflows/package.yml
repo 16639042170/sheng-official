@@ -209,23 +209,23 @@ jobs:
           text = path.read_text()
           old = "static uint8_t gScratch[kDataMax];"
           new = """#ifdef KERNEL
-// Allocated by the first layout parse: the kernel's static data does not carry 128 KiB. The host test keeps the array.
-static uint8_t *gScratch;
-#else
-static uint8_t gScratch[kDataMax];
-#endif"""
+          // Allocated by the first layout parse: the kernel's static data does not carry 128 KiB. The host test keeps the array.
+          static uint8_t *gScratch;
+          #else
+          static uint8_t gScratch[kDataMax];
+          #endif"""
           if old in text:
               text = text.replace(old, new, 1)
           elif "static uint8_t *gScratch;" not in text:
               raise SystemExit("unexpected ShengUfs scratch declaration")
           marker = "static bool findRootLayout (RootLayout *layout, const char **why)\n{\n"
           allocation = marker + """#ifdef KERNEL
-  if (!gScratch && !(gScratch = static_cast<uint8_t *>(IOMallocData(kDataMax)))) {
-    *why = "scratch allocation";
-    return false;
-  }
-#endif
-"""
+            if (!gScratch && !(gScratch = static_cast<uint8_t *>(IOMallocData(kDataMax)))) {
+              *why = "scratch allocation";
+              return false;
+            }
+          #endif
+          """
           if marker in text:
               text = text.replace(marker, allocation, 1)
           elif '*why = "scratch allocation";' not in text:
