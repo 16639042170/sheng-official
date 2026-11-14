@@ -87,17 +87,29 @@ struct Note {   /* what the event thread hands to the sink */
     uint32_t event;
 };
 
-Media gTable[MaxSessions];
+Media *gTable;                  /* MaxSessions entries, allocated before a session can be opened */
 uint32_t gNextId = 1;
-Note gRing[RingSize];
+Note *gRing;                    /* RingSize entries, allocated with the table */
 uint32_t gHead, gTail;          /* under the device's lock */
 bool gThreadStarted;
 void (*gSink)(void *, const uint8_t *, uint32_t);
 void *gSinkContext;
 
+/* The tables are too large for the kernel's static data: the device allocates them once, under its lock, before a session
+ * can be opened. */
+bool tablesReady() {
+    if (!gTable) gTable = static_cast<Media *>(IOMallocData(sizeof(Media) * MaxSessions));
+    if (!gRing) gRing = static_cast<Note *>(IOMallocData(sizeof(Note) * RingSize));
+    return gTable && gRing;
+}
+
 IOLock *lock() { return QcomIrisDeviceLock(); }
 Media *find(uint32_t id) {
-    for (Media &m : gTable) if (m.used && m.id == id) return &m;
+    if (!gTable) return nullptr;
+    for (unsigned index = 0; index < MaxSessions; ++index) {
+        Media &m = gTable[index];
+        if (m.used && m.id == id) return &m;
+    }
     return nullptr;
 }
 Media *ofIris(struct qcom_iris_session *is) {
@@ -115,7 +127,7 @@ void cacheSync(IOMemoryDescriptor *memory, uint64_t length) {
 
 /* The lock held: a note for the event thread. A full ring drops the note and fails the session, which the client then closes. */
 void note(const Note &n) {
-    if (gHead - gTail >= RingSize) {
+    if (!gRing || gHead - gTail >= RingSize) {
         Media *m = find(n.session);
         if (m) m->failed = true;
         iris_media_stats[6] = iris_media_stats[6] + 1;
@@ -428,6 +440,10 @@ const char *iris_media_card(unsigned device) { return device == IrisMediaDecoder
 void iris_media_set_sink(unsigned device, void (*sink)(void *, const uint8_t *, uint32_t), void *context) {
     if (device != IrisMediaDecoder || !QcomIrisDeviceReady()) return;
     IOLockLock(lock());
+    if (!tablesReady()) {
+        IOLockUnlock(lock());
+        return;
+    }
     gSink = sink;
     gSinkContext = context;
     const bool start = !gThreadStarted;
@@ -442,8 +458,15 @@ void iris_media_set_sink(unsigned device, void (*sink)(void *, const uint8_t *, 
 int iris_media_open(unsigned device, uint32_t *session) {
     if (!iris_media_is_up(device) || !session) return Enodev;
     IOLockLock(lock());
+    if (!tablesReady()) {
+        IOLockUnlock(lock());
+        return Enomem;
+    }
     Media *m = nullptr;
-    for (Media &candidate : gTable) if (!candidate.used) { m = &candidate; break; }
+    for (unsigned index = 0; index < MaxSessions; ++index) {
+        Media &candidate = gTable[index];
+        if (!candidate.used) { m = &candidate; break; }
+    }
     if (m) {
         memset(m, 0, sizeof *m);
         m->used = true;

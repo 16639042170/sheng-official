@@ -201,6 +201,37 @@ jobs:
                   text = text.replace(old, new, 1)
               path.write_text(text, newline="\n")
           PY
+      - name: shrink the UFS static scratch buffer
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("device/drivers/ShengUfs/RootLayout.h")
+          text = path.read_text()
+          old = "static uint8_t gScratch[kDataMax];"
+          new = """#ifdef KERNEL
+// Allocated by the first layout parse: the kernel's static data does not carry 128 KiB. The host test keeps the array.
+static uint8_t *gScratch;
+#else
+static uint8_t gScratch[kDataMax];
+#endif"""
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif "static uint8_t *gScratch;" not in text:
+              raise SystemExit("unexpected ShengUfs scratch declaration")
+          marker = "static bool findRootLayout (RootLayout *layout, const char **why)\n{\n"
+          allocation = marker + """#ifdef KERNEL
+  if (!gScratch && !(gScratch = static_cast<uint8_t *>(IOMallocData(kDataMax)))) {
+    *why = "scratch allocation";
+    return false;
+  }
+#endif
+"""
+          if marker in text:
+              text = text.replace(marker, allocation, 1)
+          elif '*why = "scratch allocation";' not in text:
+              raise SystemExit("unexpected ShengUfs layout entry")
+          path.write_text(text, newline="\n")
+          PY
       - name: report the prelink layout bounds
         run: |
           python3 - <<'PY'
