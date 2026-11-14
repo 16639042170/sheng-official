@@ -201,6 +201,106 @@ jobs:
                   text = text.replace(old, new, 1)
               path.write_text(text, newline="\n")
           PY
+      - name: review the IOSerialFamily ABI data
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("UniXNU/kits/XnuPrelink/fixtures/fileset-24A446-symbols.json")
+          record = json.loads(path.read_text())
+          expected = "38e6d9fa5f789b8228f4617ef4c6d2a3fd8ab564abdc9b62920f1db53fc1780a"
+          if record["inputs"]["kernelcache_sha256"] != expected:
+              raise SystemExit("unexpected 24A446 kernelcache fixture")
+
+          entries = [
+              {
+                  "original": "0xfffffe000b89bfa8",
+                  "native_symbol": "_linesw",
+                  "addend": 0,
+                  "evidence": (
+                      "IOSerialFamily __got slot 0xfffffe0008399d08 holds chained-fixup "
+                      "offset 0x484c2b8; with the 24A446 kernel base 0xfffffe0007004000 it "
+                      "resolves to 0xfffffe000b89bfa8, the tty line-discipline table. The "
+                      "H fileset build carries the same IOSerialFamily binary and the same "
+                      "16-slot GOT at 0xfffffff008399ca8; its slot 12 resolves to _linesw at "
+                      "0xfffffff00b8502b8. The intervening slots resolve to the OSDictionary, "
+                      "OSNumber, OSString and OSSymbol metaClass pointers, IOService "
+                      "gMetaClass/metaClass/vtable, __stack_chk_guard, gIOKitDebug, "
+                      "gIOKitDebugKey, gIOServicePlane, gPESerialBaud, _tk_nin and "
+                      "_tk_rawcc, which fixes the slot order. Source: bsd/kern/tty_conf.c "
+                      "defines struct linesw linesw[MAXLDISC]."
+                  ),
+              },
+              {
+                  "original": "0xfffffe000b89fe14",
+                  "native_symbol": "_gPESerialBaud",
+                  "addend": 0,
+                  "evidence": (
+                      "IOSerialFamily __got slot 0xfffffe0008399d00 resolves to "
+                      "0xfffffe000b89fe14; its bytes are ff ff ff ff, the -1 initializer of "
+                      "gPESerialBaud. The H fileset build's slot 11 resolves to "
+                      "_gPESerialBaud at 0xfffffff00b858e1c, with the same ff ff ff ff "
+                      "bytes and the same neighbouring slots. Source: "
+                      "pexpert/gen/pe_gen.c defines int32_t gPESerialBaud = -1."
+                  ),
+              },
+              {
+                  "original": "0xfffffe000b914a18",
+                  "native_symbol": "_tk_rawcc",
+                  "addend": 0,
+                  "evidence": (
+                      "IOSerialFamily __got slot 0xfffffe0008399d18 resolves to the "
+                      "zero-initialized 0xfffffe000b914a18. The H fileset build's slot 14 "
+                      "resolves to _tk_rawcc at 0xfffffff00b91c6d0, also zero. The code at "
+                      "0xfffffe000a3baee4 loads the two counters through slots 0x8399d10 "
+                      "and 0x8399d18, adds the same input increment to both, then updates "
+                      "tty +0x40. Source: bsd/sys/dkstat.h declares extern long tk_rawcc; "
+                      "bsd/kern/bsd_init.c defines it and bsd/kern/tty.c:509 increments it."
+                  ),
+              },
+              {
+                  "original": "0xfffffe000b914a20",
+                  "native_symbol": "_tk_nin",
+                  "addend": 0,
+                  "evidence": (
+                      "IOSerialFamily __got slot 0xfffffe0008399d10 resolves to the "
+                      "zero-initialized 0xfffffe000b914a20. The H fileset build's slot 13 "
+                      "resolves to _tk_nin at 0xfffffff00b91c6c0, also zero. It is the "
+                      "second counter in the same tty input path as _tk_rawcc. Source: "
+                      "bsd/sys/dkstat.h declares extern long tk_nin; bsd/kern/bsd_init.c "
+                      "defines it and bsd/kern/tty.c:512 increments it."
+                  ),
+              },
+              {
+                  "original": "0xfffffe000b9296e8",
+                  "native_symbol": "_gIOKitDebugKey",
+                  "addend": 0,
+                  "evidence": (
+                      "IOSerialFamily __got slot 0xfffffe0008399cf0 resolves to the "
+                      "zero-initialized 0xfffffe000b9296e8. The H fileset build's slot 9 "
+                      "resolves to _gIOKitDebugKey at 0xfffffff00b944570, also zero until "
+                      "IOService::initialize publishes the IOKitDebug OSSymbol. The use "
+                      "point at 0xfffffe000a3b85e8 reads this global and passes it to the "
+                      "IOService property lookup. Source: iokit/IOKit/IOService.h declares "
+                      "extern const OSSymbol *gIOKitDebugKey."
+                  ),
+              },
+          ]
+
+          known = {entry["original"].lower(): entry for entry in record["data"]}
+          for entry in entries:
+              old = known.get(entry["original"].lower())
+              if old is None:
+                  record["data"].append(entry)
+              elif old.get("native_symbol") != entry["native_symbol"]:
+                  raise SystemExit(
+                      f"conflicting reviewed data for {entry['original']}: "
+                      f"{old.get('native_symbol')} != {entry['native_symbol']}"
+                  )
+          path.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", newline="\n")
+          print(f"reviewed IOSerialFamily data: {len(record['data'])} entries")
+          PY
       - name: shrink the UFS static scratch buffer
         run: |
           python3 - <<'PY'
@@ -376,6 +476,7 @@ jobs:
             UniXNU/out/sheng/*/*/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf
             UniXNU/out/sheng/*/*/logs/prelink.log
             UniXNU/out/sheng/*/*/tree/kits/XnuPrelink/fileset_layout.py
+            UniXNU/out/sheng/*/*/kernel/kernel.failed.json
       - name: fileset-reference failure diagnostics
         if: failure()
         run: |
