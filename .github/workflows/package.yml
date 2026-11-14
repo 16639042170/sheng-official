@@ -301,6 +301,46 @@ jobs:
           path.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", newline="\n")
           print(f"reviewed IOSerialFamily data: {len(record['data'])} entries")
           PY
+      - name: allow the reviewed USB and serial stubs
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("UniXNU/scripts/policies/ipados-27.0.1-24A446/prelink-regression.json")
+          policy = json.loads(path.read_text())
+          expected = "38e6d9fa5f789b8228f4617ef4c6d2a3fd8ab564abdc9b62920f1db53fc1780a"
+          if policy["kernelcache_sha256"] != expected:
+              raise SystemExit("unexpected 24A446 prelink policy")
+
+          additions = {
+              "com.apple.driver.AppleUSBDeviceMux": [
+                  "0xfffffe000b29ad68",
+                  "0xfffffe000b29ae08",
+                  "0xfffffe000b29ae38",
+              ],
+              "com.apple.iokit.IOAccessoryManager": [
+                  "0xfffffe000b29c7cc",
+                  "0xfffffe000b553aec",
+              ],
+              "com.apple.iokit.IOSerialFamily": [
+                  "0xfffffe000b2bb0b8",
+                  "0xfffffe000b3d1ec0",
+              ],
+          }
+          for owner, targets in additions.items():
+              bucket = policy["stubbed"].setdefault(owner, {})
+              for target in targets:
+                  bucket.setdefault(target, 1)
+          policy["description"] = (
+              "Remaining unresolved references of the 24A446 startup baseline. "
+              "This bounds regressions, not runtime qualification. The USBDeviceMux, "
+              "IOAccessoryManager and IOSerialFamily stubs are references to base-kernel "
+              "functions that the native 4 KiB build does not provide."
+          )
+          path.write_text(json.dumps(policy, indent=2) + "\n", newline="\n")
+          print(f"reviewed prelink stubs: {sum(len(v) for v in policy['stubbed'].values())} entries")
+          PY
       - name: shrink the UFS static scratch buffer
         run: |
           python3 - <<'PY'
