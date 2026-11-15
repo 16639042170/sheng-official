@@ -154,6 +154,12 @@ jobs:
                   raise SystemExit("unexpected diagnostics patch header")
               patch.write_text(text.replace(old, new, 1), newline="\n")
           PY
+      - name: update the reviewed 24A446 prelink fixture
+        run: |
+          git -C UniXNU/kits/XnuPrelink fetch --depth=1 origin 440589b0c31625f17edf363e24b3c82c51c70bb9
+          git -C UniXNU/kits/XnuPrelink checkout FETCH_HEAD -- fixtures/fileset-24A446-symbols.json
+          actual=$(shasum -a 256 UniXNU/kits/XnuPrelink/fixtures/fileset-24A446-symbols.json | awk '{print $1}')
+          test "$actual" = "026fb497af4d9bc3afc28b6a22be3210ba52ae0c4b5193ce9b34a4b72792b5d8"
       - name: backport the reference-kernel cache-input stub
         run: |
           python3 - <<'PY'
