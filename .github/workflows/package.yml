@@ -91,6 +91,35 @@ jobs:
           path.write_text(text, newline="\n")
           print("appended iPadOS stubs to", path)
           PY
+      - name: drop the shims the 8f57be28 drivers already define
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          display = Path("device/scripts/build-gop-legacy-display-27.py")
+          lines = display.read_text().splitlines(keepends=True)
+          targets = ('extern "C" const unsigned native_legacy_request_layout[6]=',
+                     'extern "C" volatile uint32_t native_legacy_formats[10]=')
+          keep = [line for line in lines if not line.startswith(targets)]
+          dropped = len(lines) - len(keep)
+          if dropped != 2:
+              raise SystemExit(f"native display shims: dropped {dropped}, expected 2")
+          display.write_text("".join(keep), newline="\n")
+          print("dropped the request-layout and scanout-format definitions")
+
+          storage = Path("UniXNU/scripts/build-sheng-source-storage.py")
+          text = storage.read_text()
+          before = "bsd_sources = {'BootWatchdogPolicy.c', 'BootDiagExport.c', 'WifiFirmware.c', 'BluetoothFirmware.c'}"
+          after = "bsd_sources = {'BootWatchdogPolicy.c', 'BootDiagExport.c', 'WifiFirmware.c'}"
+          if before not in text:
+              raise SystemExit("storage BluetoothFirmware flag not found")
+          text = text.replace(before, after)
+          line = "    sources.append(device_source('BluetoothFirmware.c'))\n"
+          if line not in text:
+              raise SystemExit("storage BluetoothFirmware source not found")
+          storage.write_text(text.replace(line, ""), newline="\n")
+          print("left BluetoothFirmware.o to the native display archive")
+          PY
       - name: stage sheng firmware
         run: |
           python3 - <<'PY'
