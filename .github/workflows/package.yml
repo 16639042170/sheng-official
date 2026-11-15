@@ -91,21 +91,20 @@ jobs:
           path.write_text(text, newline="\n")
           print("appended iPadOS stubs to", path)
           PY
-      - name: drop the shims the 8f57be28 drivers already define
+      - name: keep the iPadOS request-layout shim only
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
           display = Path("device/scripts/build-gop-legacy-display-27.py")
           lines = display.read_text().splitlines(keepends=True)
-          targets = ('extern "C" const unsigned native_legacy_request_layout[6]=',
-                     'extern "C" volatile uint32_t native_legacy_formats[10]=')
-          keep = [line for line in lines if not line.startswith(targets)]
+          drop = 'extern "C" volatile uint32_t native_legacy_formats[10]='
+          keep = [line for line in lines if not line.startswith(drop)]
           dropped = len(lines) - len(keep)
-          if dropped != 2:
-              raise SystemExit(f"native display shims: dropped {dropped}, expected 2")
+          if dropped != 1:
+              raise SystemExit(f"native_legacy_formats definition: dropped {dropped}, expected 1")
           display.write_text("".join(keep), newline="\n")
-          print("dropped the request-layout and scanout-format definitions")
+          print("dropped the scanout-format array; the 8f57be28 backend defines it")
 
           storage = Path("UniXNU/scripts/build-sheng-source-storage.py")
           text = storage.read_text()
