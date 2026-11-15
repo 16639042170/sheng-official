@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: UniXNU/UniXNU
-          ref: 82b847c4ac3f68a57024b3082ffa3a03442defd9 # Wi-Fi runtime and Data firmware integration
+          ref: 8f57be287e0fbf7f058783b27ea941bc900b7d19 # Wi-Fi runtime and Data firmware integration
           path: UniXNU
           submodules: recursive
       - uses: actions/checkout@v4
@@ -77,6 +77,20 @@ jobs:
           path.write_text("\n".join(lines) + "\n", newline="\n")
           PY
           grep -n "native-pac" UniXNU/profiles/arch/arm64e/patches/xnu/series
+      - name: provide the two macOS-only XNU entry points on iPadOS
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("device/package/BootLog.c")
+          text = path.read_text()
+          marker = "iokit_physical_descriptor_close_notify"
+          if marker in text:
+              raise SystemExit("iPadOS stubs are already present")
+          text += "\n/* iPadOS 27: only the macOS XNU profile's patches provide these two entry points. The drivers test the\n   addresses and fall back when a call fails, so failure/false stubs keep the iPadOS link resolvable. */\nint iokit_physical_descriptor_close_notify(void *descriptor, void (*callback)(void *), void *context)\n{\n  (void)descriptor; (void)callback; (void)context;\n  return 5; /* KERN_FAILURE */\n}\n_Bool ml_static_mfree_prepare(unsigned long address, unsigned long bytes)\n{\n  (void)address; (void)bytes;\n  return 0;\n}\n"
+          path.write_text(text, newline="\n")
+          print("appended iPadOS stubs to", path)
+          PY
       - name: stage sheng firmware
         run: |
           python3 - <<'PY'
