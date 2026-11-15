@@ -58,6 +58,25 @@ jobs:
           token: ${{ secrets.BUILD_INPUTS_TOKEN }}
           path: ci-inputs
           persist-credentials: false
+      - name: backport native PAC EL0 user key handling
+        run: |
+          git -C UniXNU fetch --depth=1 origin a11553a7a29a49777f2665008f4216fcd4ad1b40
+          git -C UniXNU show FETCH_HEAD:patches/xnu-12377/native-pac-keys.patch > UniXNU/patches/xnu-12377/native-pac-keys.patch
+          git -C UniXNU show FETCH_HEAD:patches/xnu-12377/native-pac-arm64-user-jop.patch > UniXNU/patches/xnu-12377/native-pac-arm64-user-jop.patch
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("UniXNU/profiles/arch/arm64e/patches/xnu/series")
+          lines = path.read_text().splitlines()
+          anchor = "../../../../../patches/xnu-12377/native-pac-keys.patch"
+          addition = "../../../../../patches/xnu-12377/native-pac-arm64-user-jop.patch"
+          if anchor not in lines:
+              raise SystemExit("native-pac-keys entry not found in arm64e xnu series")
+          if addition not in lines:
+              lines.insert(lines.index(anchor) + 1, addition)
+          path.write_text("\n".join(lines) + "\n", newline="\n")
+          PY
+          grep -n "native-pac" UniXNU/profiles/arch/arm64e/patches/xnu/series
       - name: stage sheng firmware
         run: |
           python3 - <<'PY'
