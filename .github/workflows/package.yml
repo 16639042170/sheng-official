@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: UniXNU/UniXNU
-          ref: 43cf340fe181055029daa2bafcf88723e9e50d83 # UFS internal media and qualified firmware transport
+          ref: 4a654d1f31662f18ab94391a4f0297b17b9bb2fe # merged graphics consumers and runtime builds
           path: UniXNU
           submodules: recursive
       - uses: actions/checkout@v4
