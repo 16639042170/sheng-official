@@ -58,6 +58,17 @@ jobs:
           token: ${{ secrets.BUILD_INPUTS_TOKEN }}
           path: ci-inputs
           persist-credentials: false
+      - name: extend the AdrenoMetal bridge build timeout
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('UniXNU/scripts/build-adreno-metal-bridge.py')
+          text = path.read_text()
+          updated = text.replace('timeout=1800', 'timeout=7200')
+          if updated == text:
+              raise SystemExit('bridge timeout not found')
+          path.write_text(updated)
+          PY
       - name: backport native PAC EL0 user key handling
         run: |
           git -C UniXNU fetch --depth=1 origin a11553a7a29a49777f2665008f4216fcd4ad1b40
