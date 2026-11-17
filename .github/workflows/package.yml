@@ -58,6 +58,11 @@ jobs:
           token: ${{ secrets.BUILD_INPUTS_TOKEN }}
           path: ci-inputs
           persist-credentials: false
+      - name: select the AdrenoMetal R2507 runtime
+        run: |
+          git -C UniXNU/drivers/AdrenoMetal fetch --depth=1 origin 8c7f9502de593c04a1003690f4a9441fe88551e8
+          git -C UniXNU/drivers/AdrenoMetal checkout --detach FETCH_HEAD
+          git -C UniXNU/drivers/AdrenoMetal log -1 --oneline
       - name: backport native PAC EL0 user key handling
         run: |
           git -C UniXNU fetch --depth=1 origin a11553a7a29a49777f2665008f4216fcd4ad1b40
